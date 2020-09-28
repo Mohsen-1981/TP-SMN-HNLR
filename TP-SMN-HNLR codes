@@ -1,0 +1,374 @@
+#################### NLR-HET-TP-T #########################
+
+rm(list=ls(all=TRUE))
+library(MASS)
+library(nlsmsn)
+library(nlreg)
+
+data(Ultrasonic)
+xx=Ultrasonic
+
+
+y <- xx$y
+x <- xx$x
+z <- x
+n=length(y)
+
+
+#-----densities of SMN and TP-SMN-------#
+
+##--density of T and TP-T --#
+
+k=function(r,v)
+  ((v/2)^(r/2))*gamma((v-r)/2)/gamma(v/2)
+
+d.t=function(y,mu,sig,v){
+                         d=((y-mu)/sig)^2
+                         gamma((v+1)/2)/(gamma(v/2)*sqrt(pi*v)*sig)*((1+d/v)^(-(v+1)/2))
+                        }
+
+dtp.t=function(v,y,mu,sigma,gama){
+o=numeric(length(y))
+for(i in 1:length(y)){
+if (y[i]<=mu) o[i]=2*(1-gama)*d.t(y[i],mu,sigma*(1-gama),v) else o[i]=2*gama*d.t(y[i],mu,sigma*gama,v)
+}
+o}
+
+
+##--density of SL and TP-SL --#
+
+k=function(r,v){
+a=2*v/(2*v-r)
+return(a)
+}
+
+d.sl=function(y,mu,sig,v) {
+v=v;y=y;mu=mu;sigma=sig
+h=function(u)v*(u^(v-1))*dnorm(y,mu,sigma/sqrt(u))  
+integrate(h,0,1)$value
+}
+
+
+dtp.sl=function(v,y,mu,sigma,gama){
+o=numeric(length(y))
+for(i in 1:length(y)){
+if (y[i]<=mu) o[i]=2*(1-gama)*d.sl(y[i],mu,sigma*(1-gama),v) else o[i]=2*gama*d.sl(y[i],mu,sigma*gama,v)
+}
+o}
+
+
+##--density of CN and TP-CN --#
+
+k=function(m,v)
+  v[1]/(v[2]^(m/2))+1-v[1]
+
+d.cn=function(v,y,mu,sigma) {
+v[1]*dnorm(y,mu,sigma/sqrt(v[2]))+(1-v[1])*dnorm(y,mu,sigma)  
+}
+
+
+dtp.cn=function(v,y,mu,sigma,gama){
+o=numeric(length(y))
+for(i in 1:length(y)){
+if(y[i]<=mu) o[i]=2*(1-gama)*d.cn(v,y[i],mu,sigma*(1-gama)) else o[i]=2*gama*d.cn(v,y[i],mu,sigma*gama)
+}
+o}
+
+#--------------------------------------#
+
+
+##Definition of non linear function
+
+nlf<-function(x,betas){
+resp<- exp(-betas[1]*x)/(betas[2] + betas[3]*x)
+return(resp)
+}
+
+
+##Definition of Rho function
+
+Ro=function(ro,z){
+resp<- z^ro
+return(resp)
+}
+
+#-----------log-likelihood of HNLR--------------#
+
+##--loglike TP-T-HNLR --#
+
+loglike=function(v,y,x,Beta,sigma,gama,ro){
+m=Ro(ro,x)
+b=sqrt(2/pi)*k(1,v)
+s=0
+for(i in 1:length(y)){
+s=s+log(dtp.t(v,y[i]-nlf(x[i],Beta),b*sigma*(1-2*gama)*sqrt(m[i]),sigma*sqrt(m[i]),gama))}
+as.numeric(s)}
+
+
+#-----------log-likelihood based on the TP-T distribution--------------#
+
+loglikelihood=function(v,e,sigma,gama,ro){
+m=Ro(ro,x)
+b=sqrt(2/pi)*k(1,v)
+mu=b*sigma*(1-2*gama)*sqrt(m)
+s=0
+for(i in 1:length(y)){
+s=s+log(dtp.t(v,e[i],mu[i],sigma*sqrt(m[i]),gama))}
+as.numeric(s)}
+
+
+##--loglike TP-SL-HNLR --#
+
+loglike=function(v,y,x,Beta,sigma,gama,ro){
+m=Ro(ro,x)
+b=sqrt(2/pi)*k(1,v)
+s=0
+for(i in 1:length(y)){
+s=s+log(dtp.sl(v,y[i]-nlf(x[i],Beta),b*sigma*(1-2*gama)*sqrt(m[i]),sigma*sqrt(m[i]),gama))}
+as.numeric(s)}
+
+
+#-----------log-likelihood based on the TP-SL distribution--------------#
+
+loglikelihood=function(v,e,sigma,gama,ro){
+m=Ro(ro,x)
+b=sqrt(2/pi)*k(1,v)
+mu=b*sigma*(1-2*gama)*sqrt(m)
+s=0
+for(i in 1:length(y)){
+s=s+log(dtp.sl(v,e[i],mu[i],sigma*sqrt(m[i]),gama))}
+as.numeric(s)}
+
+
+##--loglike TP-CN-HNLR --#
+
+negativ.loglike=function(v,y,x,Beta,sigma,gama,ro){
+m=Ro(ro,x)
+b=sqrt(2/pi)*k(1,v)
+out=NA;s=0
+if(v[1]>=0 && v[1]<=1 && v[2]>0 && v[2]<1) {
+for(i in 1:length(y)){
+s=s+log(dtp.cn(v,y[i]-nlf(x[i],Beta),b*sigma*(1-2*gama)*sqrt(m[i]),sigma*sqrt(m[i]),gama))}
+out=as.numeric(s)
+}
+-out}
+
+#-----------log-likelihood based on the TP-CN distribution--------------#
+
+negativ.loglikelihood=function(v,e,mu,sigma,gama,ro){
+m=Ro(ro,x)
+b=sqrt(2/pi)*k(1,v)
+mu=b*sigma*(1-2*gama)
+out=NA;s=0
+if(v[1]>=0 && v[1]<=1 && v[2]>0 && v[2]<1) {
+for(i in 1:length(y)){
+s=s+log(dtp.cn(v,e[i],mu,sigma*sqrt(m[i]),gama))}
+out=as.numeric(s)
+}
+-out}
+
+#----------------------------------------------------------------------#
+
+#-------------------sample mode-------------------#
+
+mode=function(data){
+     uniqv=unique(data)
+     uniqv[which.max(tabulate(match(data,uniqv)))]
+}
+#-------------------------------------------------#
+
+#--------initial values with MM est----------#
+
+cc=function(r,g)
+   g^(r+1)+((-1)^r)*((1-g)^(r+1))
+d=function(r)
+   if (r%%2==0) factorial(r)/(factorial(r/2)*2^(r/2)) else sqrt(2/pi)*factorial((r-1)/2)*2^((r-1)/2)
+mu.r=function(x,r)
+     mean(((x-mean(x))/sd(x))^r)
+
+f=function(z){
+              yy=numeric(2)
+              yy[1]=mu.r(x,4)-cc(4,z[1])*k(4,abs(z[2]))*d(4)
+              yy[2]=mu.r(x,2)-cc(2,z[1])*k(2,abs(z[2]))*d(2)
+              yy
+             }  
+
+Beta0<-c(0.1913, 0.0061, 0.0110)  # obtained via Least Square method, or previous published works
+ro0 <- -0.1 # obtained via Least Square method, or previous published works
+m=Ro(ro0,x)
+e=y-nlf(x,Beta0)
+
+#------TP-T-HNLR & TP-SL-HNLR------#
+gam0=length(e[(e-mean(e))>0])/n
+
+for(q in 1:(n-1)){
+
+v=3:10
+
+sig0=sqrt(abs(var(e)/(cc(2,gam0)*k(2,v)*d(2)-(cc(1,gam0)*k(1,v)*d(1))^2)))
+mu0=sig0*(1-2*gam0)
+
+zz=numeric(length(v))
+for(j in 1:length(v)){
+   zz[j]=loglike(v[j],y,x,Beta0,sig0[j],gam0,ro0)
+  }
+}
+sig0=sig0[which(zz==max(zz))];mu0=mu0[which(zz==max(zz))]
+
+
+max0=optimize(loglikelihood ,c(2.1,150), maximum = TRUE,e,sig0,gam0,ro0)
+v0=max0$maximum
+v0
+#----------------------#
+
+#------TP-CN-HNLR------#
+v=c(0.5,0.5)
+sig0=sqrt(abs(var(e)/(cc(2,gam0)*k(2,v)*d(2)-(cc(1,gam0)*k(1,v)*d(1))^2)))
+
+v0=optim(c(0.5,0.5), negativ.loglikelihood,e=e,mu=0,sigma=sig0,gama=gam0,ro=ro0)$par
+#----------------------#
+
+sigma=sig0;v=v0;gama=gam0;Beta=Beta0;b=sqrt(2/pi)*k(1,v0);ro=ro0;m=Ro(ro,x)
+sigma1=sigma*(1-gama)
+sigma2=sigma*gama
+z.1=numeric(n)
+z.2=numeric(n)
+k.1=rep(0,n)
+k.2=rep(0,n)
+w.1=rep(0,n)
+w.2=rep(0,n)
+
+#------Equations of M-steps 1 (Beta) in the paper------#
+
+fb=function(beta){
+
+    b1 <- beta[1]
+    b2 <- beta[2]
+    b3 <- beta[3]
+
+    sum((w.1/sigma1^2+w.2/sigma2^2)/m*(y-nlf(x,Beta)-b*(sigma1-sigma2)*sqrt(m))^2)
+
+}
+
+#------Equations of M-steps 1 (ro) in the paper------#
+
+fr=function(ro){
+    m=Ro(ro,x)
+    sum(log(m)+(w.1/sigma1^2+w.2/sigma2^2)/m*(y-nlf(x,Beta)-b*(sigma1-sigma2)*sqrt(m))^2)
+}
+
+#------Equations of M-steps 2-3 (Sigma1 & Sigma2) in the paper------#
+
+fs1=function(s1,s2,e,w1,w2){
+n/(s1+s2)-sum(w1/(m*s1^3)*(e-b*(s1-s2)*sqrt(m))^2+b*(w1/s1^2+w2/s2^2)/m*(e-b*(s1-s2)*sqrt(m)))
+}
+
+fs2=function(s2,s1,e,w1,w2){
+n/(s1+s2)-sum(w2/(m*s2^3)*(e-b*(s1-s2)*sqrt(m))^2-b*(w1/s1^2+w2/s2^2)/m*(e-b*(s1-s2)*sqrt(m)))
+}
+
+##### start of the EM-algorithm #####
+crit = 1
+count = 0
+eps = 1e-3 # tolerance
+
+loglike.new = 0
+log.lik =0
+
+while(crit > eps){
+
+### Step E:
+
+b=sqrt(2/pi)*k(1,v)
+log.lik = loglike(v,y,x,Beta,sigma,gama,ro)   # for TP-T & TP-SL
+log.lik =-negativ.loglike(v,y,x,Beta,sigma,gama,ro)  # for TP-CN
+e=y-nlf(x,Beta)
+
+#--------conditional expectations----------#
+dn=rep(0,n)
+for(i in 1:n) if(e[i]<=b*(sigma1-sigma2)*sqrt(m[i])) z.1[i]=1 else z.1[i]=0
+z.2=1-z.1
+
+#--------TP-T-HNLR---------#
+for(i in 1:n) {dn[i]=e[i]-b*(sigma1-sigma2)*sqrt(m[i]);k.1[i]=(v+1)/(v+(dn[i]/(sigma1*sqrt(m[i])))^2);k.2[i]=(v+1)/(v+(dn[i]/(sigma2*sqrt(m[i])))^2)}
+w.1=k.1*z.1;w.2=k.2*z.2
+#------------------------------------------#
+
+
+#--------TP-SL-HNLR---------#
+for(i in 1:n) {dn[i]=e[i]-b*(sigma1-sigma2)sqrt(m[i]);
+k.1[i]=(2*v+1)/((dn[i]/(sigma1*sqrt(m[i])))^2)*pgamma(1,v+3/2,((dn[i]/(sigma1*sqrt(m[i])))^2)/2)/pgamma(1,v+1/2,((dn[i]/(sigma1*sqrt(m[i])))^2)/2)
+k.2[i]=(2*v+1)/((dn[i]/(sigma2*sqrt(m[i])))^2)*pgamma(1,v+3/2,((dn[i]/(sigma2*sqrt(m[i])))^2)/2)/pgamma(1,v+1/2,((dn[i]/(sigma2*sqrt(m[i])))^2)/2)
+}
+w.1=k.1*z.1;w.2=k.2*z.2
+#--------------------------#
+
+#--------TP-CN-HNLR---------#
+for(i in 1:n) {k.1[i]=(v[2]*v[1]*dnorm(e[i],b*(sigma1-sigma2)*sqrt(m[i]),sigma1*sqrt(m[i])/sqrt(v[2]))+(1-v[1])*dnorm(e[i],b*(sigma1-sigma2)*sqrt(m[i]),sigma1))/(v[1]*dnorm(e[i],b*(sigma1-sigma2)*sqrt(m[i]),sigma1*sqrt(m[i])/sqrt(v[2]))+(1-v[1])*dnorm(e[i],b*(sigma1-sigma2)*sqrt(m[i]),sigma1*sqrt(m[i])));
+               k.2[i]=(v[2]*v[1]*dnorm(e[i],b*(sigma1-sigma2)*sqrt(m[i]),sigma2*sqrt(m[i])/sqrt(v[2]))+(1-v[1])*dnorm(e[i],b*(sigma1-sigma2)*sqrt(m[i]),sigma2))/(v[1]*dnorm(e[i],b*(sigma1-sigma2)*sqrt(m[i]),sigma2*sqrt(m[i])/sqrt(v[2]))+(1-v[1])*dnorm(e[i],b*(sigma1-sigma2)*sqrt(m[i]),sigma2*sqrt(m[i])))}
+w.1=k.1*z.1;w.2=k.2*z.2
+#--------------------------#
+
+Beta=optim(Beta,fb)$par
+
+if(sum(z.1)!=0 & sum(z.1)!=n){
+sigma1=uniroot(fs1,c(0.00000001,1000),sigma2,e,w.1,w.2)$root
+sigma2=uniroot(fs2,c(0.00000001,1000),sigma1,e,w.1,w.2)$root}
+
+if(sum(z.1)==0) {sigmal=0;sigma2=sqrt(sum(w.2*(y-nlf(x,Beta))^2)/n)}
+if(sum(z.2)==n) {sigma2=0;sigma1=sqrt(sum(w.1*(y-nlf(x,Beta))^2)/n)}
+
+
+if(sigma1==0) {gama=1;sigma=sigmal}
+if(sigma2==0) {gama=0;sigma=sigma2}
+if(sigma1!=0 & sigma2!=0) {sigma=sigma1+sigma2;gama=sigma2/sigma}
+
+ro=optimize(fr, c(-3, 3))$minimum
+m=Ro(ro,x)
+
+
+#------TP-T-HNLR & TP-SL-HNLR -------#
+max2=optimize(loglike ,c(2.1 ,150), maximum = TRUE,y,x,Beta,sigma,gama,ro)
+v=max2$maximum
+v
+#------------------------------------#
+
+############
+
+#------TP-T-HNLR & TP-SL-HNLR -------#
+v=optim(v,negativ.loglike,y=y,x=x,Beta=Beta,sigma=sigma,gama=gama,ro=ro)$par
+#------------------------------------#
+
+############
+
+loglike.new = loglike(v,y,x,Beta,sigma,gama,ro)   # for TP-T & TP-SL
+loglike.new = -negativ.loglike(v,y,x,Beta,sigma,gama,ro)  # for TP-CN
+
+crit = abs(loglike.new/log.lik - 1)
+print(c(count, round(crit,7), loglike.new))
+
+}                      ###### END OF WHILE ######
+
+
+
+Beta
+sigma
+gama
+ro
+v
+
+
+#------TP-T-HNLR & TP-SL-HNLR -------#
+AIC=2*7-2*loglike.new
+BIC=7*log(n)-2*loglike.new
+AIC
+BIC
+#------------------------------------#
+
+#-------------TP-CN-HNLR-------------#
+AIC=2*8-2*loglike.new
+BIC=8*log(n)-2*loglike.new
+AIC
+BIC
+#------------------------------------#
+
